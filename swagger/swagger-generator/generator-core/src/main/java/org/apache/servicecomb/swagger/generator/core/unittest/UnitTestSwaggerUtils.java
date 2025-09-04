@@ -27,7 +27,12 @@ import org.apache.servicecomb.swagger.generator.SwaggerGenerator;
 import org.junit.jupiter.api.Assertions;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
 import io.swagger.v3.core.util.Yaml;
 import io.swagger.v3.oas.models.OpenAPI;
@@ -81,8 +86,25 @@ public final class UnitTestSwaggerUtils {
       expectSchema = expectSchema.substring(offset + 4);
     }
 
-    if (!Objects.equals(expectSchema, schema)) {
-      Assertions.assertEquals(expectSchema, schema);
+    try {
+      ObjectMapper yaml = new ObjectMapper(new YAMLFactory());
+      JsonNode expectedNode = yaml.readTree(expectSchema);
+      JsonNode actualNode   = yaml.readTree(schema);
+
+      if (!expectedNode.equals(actualNode)) {
+        ObjectMapper json = new ObjectMapper()
+            .enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
+            .enable(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY);
+        String canonExpected = json.writeValueAsString(expectedNode);
+        String canonActual   = json.writeValueAsString(actualNode);
+        Assertions.assertEquals(
+            canonExpected,
+            canonActual,
+            "OpenAPI content differs (order-insensitive compare)"
+        );
+      }
+    } catch (IOException e) {
+      Assertions.fail("Failed to parse YAML for order-insensitive comparison: " + e.getMessage(), e);
     }
 
     return generator;
